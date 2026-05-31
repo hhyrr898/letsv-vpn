@@ -1,0 +1,33 @@
+---
+layout: base.njk
+title: 快连使用教程与连接技巧
+description: 快连安装配置、节点切换、线路选择与多平台连接问题的处理教程列表。
+permalink: /blog/
+---
+<section class="section">
+  <div class="container">
+    <header class="section-head">
+      <h1>快连使用教程与连接技巧</h1>
+      <p>按时间整理快连安装、连接与日常使用相关内容。</p>
+    </header>
+    <div class="list-grid">
+      {% for post in collections.posts %}
+        <article class="list-card">
+          {% if post.data.heroImage %}
+            <a href="{{ post.url }}">
+              <img src="{{ post.data.heroImage }}" alt="{{ post.data.heroAlt or post.data.title }}" loading="lazy">
+            </a>
+          {% endif %}
+          <time datetime="{{ post.date | readableDate }}">{{ post.date | readableDate }}</time>
+          <h2><a href="{{ post.url }}">{{ post.data.title }}</a></h2>
+          <p>{{ post.data.description }}</p>
+          <div class="tag-row">
+            {% for tag in post.data.tags | publicTags %}
+              <a href="/tags/{{ tag | tagSlug }}/">{{ tag }}</a>
+            {% endfor %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>

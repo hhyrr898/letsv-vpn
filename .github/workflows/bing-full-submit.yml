@@ -1,0 +1,26 @@
+name: Bing full site submit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Build site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: npm run build
+      - name: Submit all URLs to Bing
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          BING_API_KEY: ${{ secrets.BING_API_KEY }}
+        run: npm run push:bing:all

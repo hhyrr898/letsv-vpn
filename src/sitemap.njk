@@ -1,0 +1,45 @@
+---
+permalink: /sitemap.xml
+eleventyExcludeFromCollections: true
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>{{ site.url }}/</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+  <url>
+    <loc>{{ site.url }}/blog/</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+  <url>
+    <loc>{{ site.url }}/categories/</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+  <url>
+    <loc>{{ site.url }}/tags/</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+  <url>
+    <loc>{{ site.url }}/dows.html</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+{% for post in collections.posts %}
+  <url>
+    <loc>{{ site.url }}{{ post.url }}</loc>
+    <lastmod>{{ post.date | readableDate }}</lastmod>
+  </url>
+{% endfor %}
+{% for cat in collections.publicCategories %}
+  <url>
+    <loc>{{ site.url }}/categories/{{ cat | categorySlug }}/</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+{% endfor %}
+{% for tag in collections.publicTags %}
+  <url>
+    <loc>{{ site.url }}/tags/{{ tag | tagSlug }}/</loc>
+    <lastmod>{{ collections.posts[0].date | readableDate }}</lastmod>
+  </url>
+{% endfor %}
+</urlset>

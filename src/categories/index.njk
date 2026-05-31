@@ -1,0 +1,23 @@
+---
+layout: base.njk
+title: 快连内容目录
+description: 快连客户端安装、连接、线路切换与多平台使用文章目录分类。
+permalink: /categories/
+---
+<section class="section">
+  <div class="container">
+    <header class="section-head">
+      <h1>快连内容目录</h1>
+      <p>按主题浏览快连相关文章与教程。</p>
+    </header>
+    <div class="list-grid">
+      {% for cat in collections.publicCategories %}
+        <article class="list-card">
+          <h2>{{ cat }}</h2>
+          <p>查看 {{ cat }} 下的快连实践内容。</p>
+          <a class="link-btn" href="/categories/{{ cat | categorySlug }}/">进入目录</a>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>

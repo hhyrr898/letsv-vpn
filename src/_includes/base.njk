@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or site.title }}</title>
+    <meta name="description" content="{{ description or site.description }}">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/" aria-label="快连">
+          <img src="/assets/logo.svg" alt="快连 Logo 标识" width="40" height="40">
+          <span class="brand-name">快连</span>
+        </a>
+        <nav class="nav" aria-label="主导航">
+          <a href="/">首页</a>
+          <a href="/dows.html">下载中心</a>
+          <a href="/blog/">博客</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      {{ content | safe }}
+    </main>
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <section>
+          <h2>快连下载</h2>
+          <p>快连下载、节点连接、线路切换与多平台使用说明，帮助用户快速完成安装与日常连接。</p>
+        </section>
+        <nav aria-label="页脚导航">
+          <a href="/">快连下载</a>
+          <a href="/dows.html">客户端下载</a>
+          <a href="/blog/">使用教程</a>
+          <a href="/categories/">目录</a>
+          <a href="/tags/">Tags</a>
+          <a href="/sitemap.xml">站点地图</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
