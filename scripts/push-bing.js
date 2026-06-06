@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
-const siteUrl = (process.env.SITE_URL || "").replace(/\/$/, "");
-const apiKey = process.env.BING_API_KEY;
+const siteUrl = (process.env.SITE_URL || "").trim().replace(/\/$/, "");
+const apiKey = (process.env.BING_API_KEY || "").trim();
 
 function getMode() {
   const arg = process.argv.find((item) => item.startsWith("--mode="));
@@ -22,8 +22,14 @@ async function readAllUrls() {
 }
 
 async function submit(urls) {
-  if (!apiKey) throw new Error("Set BING_API_KEY before submitting URLs.");
-  if (!siteUrl) throw new Error("Set SITE_URL before submitting URLs.");
+  if (!apiKey) {
+    console.log("Skip Bing submission: BING_API_KEY is not set.");
+    return;
+  }
+  if (!siteUrl) {
+    console.log("Skip Bing submission: SITE_URL is not set.");
+    return;
+  }
   if (!urls.length) {
     console.log("No URLs to submit.");
     return;
@@ -38,9 +44,14 @@ async function submit(urls) {
 
   const text = await response.text();
   if (!response.ok) {
+    if (text.includes("InvalidApiKey")) {
+      throw new Error(
+        `Bing API key is invalid. Regenerate the key in Bing Webmaster Tools and ensure ${siteUrl} is verified. Response: ${text}`
+      );
+    }
     throw new Error(`Bing submission failed: ${response.status} ${text}`);
   }
-  console.log(`Submitted ${urls.length} URL(s) to Bing.`);
+  console.log(`Submitted ${urls.length} URL(s) to Bing for ${siteUrl}.`);
 }
 
 async function main() {
