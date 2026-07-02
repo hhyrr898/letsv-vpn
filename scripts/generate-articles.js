@@ -1,11 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { countChineseChars, getCharLimits, shortenBodyIfNeeded } from "./article-validation.js";
 
 const root = process.cwd();
 const blogDir = path.join(root, "src", "blog");
 const outputFile = path.join(root, ".generated-urls.json");
-const banned = [/seo/i, /关键词/g, /优化/g, /排名/g, /收录/g, /曝光/g];
+const MAX_ATTEMPTS = 5;
+const STYLE = { id: "tutorial", name: "教程型", length: "750-2200字" };
+
+const banned = [
+  /seo/i,
+  /关键词/g,
+  /优化/g,
+  /排名/g,
+  /收录/g,
+  /曝光/g,
+  /综上所述/g,
+  /毋庸置疑/g,
+  /在当今数字化时代/g,
+  /业界领先/g,
+  /全方位/g,
+  /深度融合/g,
+  /极致/g
+];
+
 const tagPool = [
   "Windows客户端",
   "macOS客户端",
@@ -45,6 +64,24 @@ function cleanText(input) {
   return text.trim();
 }
 
+function stripJsonFence(input) {
+  return String(input || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function parseArticleJson(input) {
+  const parsed = JSON.parse(stripJsonFence(input));
+  return {
+    title: cleanText(parsed.title),
+    description: cleanText(parsed.description),
+    category: cleanText(parsed.category),
+    body: cleanText(parsed.body)
+  };
+}
+
 function pickTags(seed) {
   const first = tagPool[seed % tagPool.length];
   const second = tagPool[(seed + 5) % tagPool.length];
@@ -52,14 +89,80 @@ function pickTags(seed) {
   return [...new Set([first, second, third])];
 }
 
+function hasVersionOrDate(text) {
+  return /\d+\.\d+(\.\d+)?/.test(text) || /20\d{2}[-年/]\d{1,2}/.test(text) || /快连\s*\d/i.test(text);
+}
+
+function hasOperationSteps(text) {
+  const stepMarkers =
+    (text.match(/第[一二三四五六七八九十\d]+步/g) || []).length +
+    (text.match(/^\s*\d+\.\s+/gm) || []).length;
+  return stepMarkers >= 3;
+}
+
+function hasFaqSection(text) {
+  return /##\s*常见问题/.test(text);
+}
+
+function hasFirstPerson(text) {
+  return /我[^们]|上周|昨天|测试时|升级后/.test(text);
+}
+
+function validateArticle({ title, body }) {
+  const issues = [];
+  const { min: minChars, max: maxChars } = getCharLimits(STYLE);
+  const charCount = countChineseChars(body);
+
+  if (!title.startsWith("快连")) issues.push("标题必须以快连开头");
+  if (/白皮书|完整指南|全面指南/.test(title)) issues.push("标题太官腔");
+  if (charCount < minChars || charCount > maxChars) {
+    issues.push(`正文字数 ${charCount}，应在 ${minChars}-${maxChars} 之间`);
+  }
+  if (!hasVersionOrDate(body)) issues.push("正文缺少具体版本号或日期");
+  if (!hasOperationSteps(body)) issues.push("正文缺少至少 3 个操作步骤");
+  if (!hasFaqSection(body)) issues.push("缺少「## 常见问题」小节");
+  if (!hasFirstPerson(body)) issues.push("缺少第一人称叙述");
+  return issues;
+}
+
 function frontMatter(data) {
   const tags = JSON.stringify(data.tags);
-  let fm = `---\nlayout: article.njk\ntitle: ${data.title}\ndescription: ${data.description}\ndate: ${data.date}\ncategory: ${data.category}\ntags: ${tags}\nheroImage: "${data.heroImage}"\nheroAlt: "${data.heroAlt}"\n`;
+  let fm = `---\nlayout: article.njk\ntitle: ${data.title}\ndescription: ${data.description}\ndate: ${data.date}\ngenerated: true\ncategory: ${data.category}\ntags: ${tags}\nheroImage: "${data.heroImage}"\nheroAlt: "${data.heroAlt}"\n`;
   if (data.videoTitle) {
     fm += `videoTitle: "${data.videoTitle}"\nvideoDescription: "${data.videoDescription}"\nvideoPoster: "${data.videoPoster}"\n`;
   }
   fm += `---\n\n${data.body}\n`;
   return fm;
+}
+
+function buildPrompt(topic) {
+  const { min: minChars, max: maxChars } = getCharLimits(STYLE);
+  return [
+    "Write one original Chinese markdown article for a normal Kuailian (快连) resource website.",
+    "Return strict JSON only with fields: title, description, category, body.",
+    "The title must start with 快连 and look like a personal technical blog title, not a white paper or official complete guide.",
+    `Topic direction: ${topic}.`,
+    `Body must use h2/h3 headings only, no h1. Chinese character count must be ${minChars}-${maxChars}.`,
+    "Body must include one exact version number or date, at least 3 operation steps, a 常见问题 section, and at least one first-person paragraph such as 我测试时发现 or 上周升级后.",
+    "Include one markdown image using /static/images/ path (no bing hotlink).",
+    "Do not include external links, promotional claims, or words: seo, 关键词, 优化, 排名, 收录, 曝光, 综上所述, 毋庸置疑, 在当今数字化时代, 业界领先, 全方位, 深度融合, 极致."
+  ].join("\n");
+}
+
+function buildPolishPrompt(draft) {
+  const { min: minChars, max: maxChars } = getCharLimits(STYLE);
+  return [
+    "把下面文章改写成贴吧/知乎网友风格，输出 strict JSON only，字段仍然是 title, description, category, body。",
+    "要求：缩短约20%官话，加1-2处自然口语，保留技术信息，随机替换部分连接词。",
+    `正文中文字数必须 ${minChars}-${maxChars}，超出会被退回。`,
+    "删掉「在当今」「随着…的快速发展」这类开头。",
+    "标题像博客标题，不要出现「技术白皮书」「完整指南」这种官腔。",
+    "正文必须包含：一个具体版本号或日期；至少3步操作步骤；一个「常见问题」小节；至少一段第一人称。",
+    "正文只用 h2/h3，不要 h1。",
+    "禁止用词：综上所述、毋庸置疑、在当今数字化时代、业界领先、全方位、深度融合、极致。",
+    "输入 JSON：",
+    JSON.stringify(draft)
+  ].join("\n");
 }
 
 async function createArticle(ai, index) {
@@ -68,28 +171,52 @@ async function createArticle(ai, index) {
   const seed = Math.floor(Date.now() / 1000) + index;
   const tags = pickTags(seed);
   const topic = tags.join("、");
-  const prompt = [
-    "Write one original Chinese markdown article for a normal Kuailian (快连) resource website.",
-    "Return strict JSON only with fields: title, description, category, body.",
-    "The title must start with 快连 and be a long-tail article title.",
-    `Topic direction: ${topic}.`,
-    "Body must use h2/h3 headings only, no h1, 650-900 Chinese characters.",
-    "Include one or two markdown images using https://tse-mm.bing.com/th?q=<encoded keyword> format.",
-    "Do not include external links, promotional claims, or words: seo, 关键词, 优化, 排名, 收录, 曝光."
-  ].join("\n");
+  const { max: maxChars } = getCharLimits(STYLE);
 
-  const result = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt
-  });
-  const raw = result.text.replace(/^```json|```$/g, "").trim();
-  const parsed = JSON.parse(raw);
-  const title = cleanText(parsed.title).startsWith("快连")
-    ? cleanText(parsed.title)
-    : `快连 ${cleanText(parsed.title)}`;
-  const description = cleanText(parsed.description).slice(0, 120);
-  const category = cleanText(parsed.category || tags[0]);
-  const body = cleanText(parsed.body);
+  let lastIssues = [];
+  let parsed = null;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const retryNote = attempt > 0 ? `\n\n上次不合格：${lastIssues.join("；")}。请修正后重新输出完整 JSON。` : "";
+    const first = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: buildPrompt(topic) + retryNote
+    });
+    const firstDraft = parseArticleJson(first.text);
+    const polished = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: buildPolishPrompt(firstDraft) + retryNote
+    });
+    parsed = parseArticleJson(polished.text);
+
+    let title = parsed.title.startsWith("快连") ? parsed.title : `快连 ${parsed.title}`;
+    let body = parsed.body;
+    lastIssues = validateArticle({ title, body });
+
+    if (lastIssues.length === 0) break;
+
+    const onlyTooLong =
+      lastIssues.length === 1 && lastIssues[0].includes("正文字数") && countChineseChars(body) > maxChars;
+    if (onlyTooLong && attempt >= MAX_ATTEMPTS - 2) {
+      try {
+        body = cleanText(await shortenBodyIfNeeded(ai, body, maxChars));
+        lastIssues = validateArticle({ title, body });
+        parsed = { ...parsed, body };
+        if (lastIssues.length === 0) break;
+      } catch (error) {
+        console.warn("正文压缩失败，继续重试:", error.message);
+      }
+    }
+  }
+
+  if (lastIssues.length > 0) {
+    throw new Error(`Article validation failed after ${MAX_ATTEMPTS} attempts: ${lastIssues.join("；")}`);
+  }
+
+  const title = parsed.title.startsWith("快连") ? parsed.title : `快连 ${parsed.title}`;
+  const description = parsed.description.slice(0, 120);
+  const category = parsed.category || tags[0];
+  const body = parsed.body;
   const slug = `${slugify(title)}-${Date.now()}-${index}`;
 
   return {
@@ -101,7 +228,7 @@ async function createArticle(ai, index) {
       date,
       category,
       tags,
-      heroImage: `https://tse-mm.bing.com/th?q=${encodeURIComponent(title)}`,
+      heroImage: `/static/images/photo-1486406146926-c627a92ad1ab.jpg`,
       heroAlt: `${title} 配图`,
       body
     })
